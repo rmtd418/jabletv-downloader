@@ -29,6 +29,11 @@ def scrape(ci_params, folderPath, pbar, lock, session, urls):
             with open(saveName, 'wb') as f:
                 f.write(content_ts)
             
+            # 檢查零字節（寫入成功但大小為 0 → 視為失敗）
+            if os.path.getsize(saveName) == 0:
+                os.remove(saveName)
+                return False
+            
             # ✅ 只有成功下載才更新進度條
             with lock:
                 pbar.update(1)
