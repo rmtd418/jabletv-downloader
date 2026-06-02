@@ -8,9 +8,9 @@
 
 ## 简介 | Introduction
 
-JableTV 高速并行下载工具，基于 Playwright 提取 m3u8 流地址，32 线程并行下载 TS 片段，AES-128 解密，ffmpeg 无损合成 MP4。
+JableTV 高速并行下载工具，基于 Playwright 提取 m3u8 流地址，32 线程并行下载 TS 片段，AES-128 解密，ffmpeg 无损合成 MP4，全程完整性验证。
 
-Fast multi-threaded JableTV video downloader. Extracts m3u8 via Playwright, downloads TS segments in 32 parallel threads, decrypts AES-128 if needed, and assembles into a single MP4 without re-encoding.
+Fast multi-threaded JableTV video downloader. Extracts m3u8 via Playwright, downloads TS segments in 32 parallel threads, decrypts AES-128 if needed, and assembles into a single MP4 with full integrity verification.
 
 ---
 
@@ -20,48 +20,22 @@ Fast multi-threaded JableTV video downloader. Extracts m3u8 via Playwright, down
 - 🔄 **自动重试** — 失败片段自动重下 / Failed segments retry automatically
 - 🔐 **AES-128 解密** — 支持加密流 / Handles encrypted streams
 - 📊 **实时进度条** — tqdm 显示下载与合成进度 / Real-time progress via tqdm
-- 🎬 **快速合成** — ffmpeg `-c copy` 不重编码 + `faststart` / Lossless concat with instant streaming
-- 🧹 **自动清理** — 合并后自动删除临时片段 / Auto-cleanup after merge
+- 🎬 **快速合成** — ffmpeg `-c copy` 不重编码 / Lossless concat with instant streaming
+- ✅ **下载验证** — 零字节片段检测 + 片段数量核对 / Zero-byte detection + segment count check
+- ✅ **合成验证** — ffprobe 检查视频流、音频流、时长 / ffprobe checks video, audio, duration
+- 🧹 **自动清理** — 保留最终文件，安全删除临时片段 / Safe cleanup, preserves final output
 - 🔌 **路径自动检测** — playwright-cli 自动定位，无需手动配置 / Auto-detect playwright-cli path
-
----
-
-## 前置依赖 | Prerequisites
-
-| 依赖 | 说明 |
-|:-----|:-----|
-| Python 3.8+ | 运行环境 |
-| [ffmpeg](https://ffmpeg.org/) | 合成 MP4（需加入 PATH） |
-| Node.js | 运行 Playwright |
-| npm 全局包 | `npm install -g @playwright/cli` |
-| Playwright 浏览器 | `npx playwright install chromium` |
 
 ---
 
 ## 安装 | Installation
 
 ```bash
-# 克隆仓库
 git clone https://github.com/rmtd418/jabletv-downloader.git
 cd jabletv-downloader
-
-# 安装 Python 依赖（建议先建 venv）
 pip install -r requirements.txt
-
-# 安装 Playwright
 npm install -g @playwright/cli
 npx playwright install chromium
-```
-
-### 创建虚拟环境（可选但推荐）
-
-```bash
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# Linux / macOS
-source venv/bin/activate
-pip install -r requirements.txt
 ```
 
 ---
@@ -72,7 +46,7 @@ pip install -r requirements.txt
 # 基础用法 — 下载到 ./output/番号/番号.mp4
 python jable_fast.py https://jable.tv/videos/adn-758/
 
-# 自定义输出路径
+# 自定义输出路径（推荐带子目录）
 python jable_fast.py https://jable.tv/videos/ipx-486/ -o D:/downloads
 ```
 
@@ -89,17 +63,6 @@ options:
   -o, --output OUTPUT   输出目录（默认 ./output/番号/）/ Output directory
 ```
 
-### 输出结构 | Output structure
-
-```
-jabletv-downloader/
-└── output/
-    ├── adn-758/
-    │   └── adn-758.mp4      ← 下载结果
-    └── ipx-486/
-        └── ipx-486.mp4
-```
-
 ---
 
 ## 运行流程 | How it works
@@ -112,26 +75,32 @@ flowchart LR
     D -->|是| E[AES-128 解密]
     D -->|否| F[32 线程下载]
     E --> F
-    F --> G[ffmpeg 合成]
-    G --> H[输出 MP4]
+    F --> G[零字节检测]
+    G --> H[片段数量校验]
+    H --> I[ffmpeg 合成]
+    I --> J[ffprobe 验证]
+    J --> K[输出 MP4]
 ```
 
-1. **Playwright** 打开视频页，提取 m3u8 地址
-2. **m3u8 解析** 获取所有 TS 片段地址和加密密钥
-3. **32 线程并行下载** 同时拉取所有片段
-4. **ffmpeg concat demuxer** 无损合成 MP4
-5. **自动清理** 删除临时片段
+1. **Playwright** 打开视频页，提取 m3u8 地址（Cloudflare 轮询等待，最长 30s）
+2. **m3u8 解析** 获取全部 TS 片段地址和加密密钥
+3. **32 线程并行下载** 同时拉取所有片段，单个失败自动重试
+4. **零字节检测** 发现空文件自动标记重下
+5. **片段数量校验** 对比实际下载数与 m3u8 声明数
+6. **ffmpeg concat demuxer** 无损合成 MP4
+7. **ffprobe 验证** 检查视频流、音频流、时长偏差 < 60s
+8. **自动清理** 保留最终 mp4，删除临时文件
 
 ---
 
 ## 项目结构 | Project structure
 
 ```
-├── jable_fast.py    # 主入口 — CLI 参数解析 + 流程编排
-├── crawler.py       # 多线程下载引擎 + 自动重试
+├── jable_fast.py    # 主入口 — CLI 参数 + 流程编排 + 完整性验证
+├── crawler.py       # 多线程下载引擎 + 自动重试 + 零字节检测
 ├── merge.py         # ffmpeg concat 清单生成
 ├── encode.py        # ffmpeg 封装 + tqdm 进度
-├── delete.py        # 临时文件清理
+├── delete.py        # 安全清理（保留最终文件）
 ├── config.py        # HTTP 请求头
 ├── requirements.txt # Python 依赖
 ├── CHANGELOG.md     # 更新日志
@@ -158,6 +127,9 @@ flowchart LR
 | pw() 超时 | 30s 固定，慢网必崩 | 120s + Cloudflare 轮询自适应 |
 | m3u8 下载 | `urlretrieve` 无超时可永久卡死 | `requests.get(timeout=15)` 安全限时 |
 | 删除权限 | 文件被锁直接崩 | `try/except PermissionError` 优雅跳过 |
+| 零字节片段 | 无检测 — 空文件混入合并 | 下载后立即检查，自动重试 |
+| 片段数量 | 不校验 | 合成前比对 m3u8 声明数 |
+| 合成后验证 | 无 | ffprobe 检查视频流/音频流/时长 |
 
 ---
 
