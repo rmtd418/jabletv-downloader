@@ -12,14 +12,15 @@ env/
 *.mp4
 *.ts
 *.m3u8
-*.jpg
+concat_list.txt
 
 # macOS
 *.DS_store
 .DS_Store
 
-# ChromeDriver（自動下載，不需 commit）
-chromedriver*
+# Playwright 持久設定檔
+.playwright-cli/
 
-# 下載資料夾（影片可能很大）
+# 下載資料夾
 downloads/
+output/

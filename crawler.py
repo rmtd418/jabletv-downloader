@@ -26,7 +26,7 @@ def scrape(ci_params, folderPath, pbar, lock, session, urls):
             if ci_params:
                 ci = AES.new(ci_params['key'], AES.MODE_CBC, ci_params['iv'])
                 content_ts = ci.decrypt(content_ts)
-            with open(saveName, 'ab') as f:
+            with open(saveName, 'wb') as f:
                 f.write(content_ts)
             
             # ✅ 只有成功下載才更新進度條
@@ -100,21 +100,14 @@ def startCrawl(ci_params, folderPath, downloadList, total, workers):
 
 def _run_crawl(ci_params, folderPath, downloadList, total, workers, lock, session):
     round_num = 0
+    # ✅ 清理舊殘留片段（避免前次失敗的殘片干擾）
+    for f in os.listdir(folderPath):
+        if f.endswith('.mp4') and f != os.path.basename(folderPath) + '.mp4':
+            os.remove(os.path.join(folderPath, f))
     # ✅ 初始化進度條，總數固定為 total
     with tqdm(total=total, unit='片段', desc='⬇ 下載進度',
               bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
               dynamic_ncols=True, colour='cyan') as pbar:
-
-        # 先檢查已經下載過的，更新進度條初始值
-        existing_count = 0
-        initial_list = list(downloadList)
-        for url in initial_list:
-            file_ts = url.split('/')[-1][0:-3] + '.mp4'
-            if os.path.exists(os.path.join(folderPath, file_ts)):
-                existing_count += 1
-                downloadList.remove(url)
-        
-        pbar.update(existing_count)
 
         while downloadList:
             round_num += 1

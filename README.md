@@ -1,121 +1,116 @@
-# JableTVDownload
+# JableTV Downloader
 
-## 下載JableTV好幫手
+> **Fork** of [hcjohn463/JableTVDownload](https://github.com/hcjohn463/JableTVDownload) — significant rewrites and bug fixes.
 
-每次看正要爽的時候就給我卡住轉圈圈  
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-直接下載到電腦看沒煩惱
+Fast multi-threaded JableTV video downloader powered by Playwright + ffmpeg.
 
----
+Extracts the m3u8 stream URL via Playwright, downloads all TS segments in parallel (32 threads), decrypts AES-128 if needed, and assembles them into a single MP4 — all without re-encoding.
 
-## 🐳 Docker 一鍵啟動（推薦）
+## Features
 
-不需要手動安裝 ChromeDriver、FFmpeg、Python 環境，全部封裝在容器內。
+- 🚀 **32-thread parallel download** — maxes out your bandwidth
+- 🔄 **Auto-retry** — failed segments are retried automatically
+- 🔐 **AES-128 decryption** — handles encrypted streams
+- 📊 **Real-time progress** — tqdm progress bars for download & encoding
+- 🎬 **Fast concat** — `ffmpeg -c copy` with `+faststart` for instant streaming
+- 🧹 **Auto-cleanup** — segment files removed after successful merge
+- 🔌 **Auto-detect** — playwright-cli location auto-detected, no manual config
 
-### 前置需求
-- 安裝 [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+## Prerequisites
 
-### 使用方法
+- Python 3.8+
+- [ffmpeg](https://ffmpeg.org/) (in PATH)
+- Node.js + `npm install -g @playwright/cli`
+- Playwright browsers: `npx playwright install chromium`
+
+## Installation
 
 ```bash
-# 1. 建立 image
-docker build -t jable-downloader .
-
-# 2. 執行（互動模式，下載影片存至本機 downloads 資料夾）
-docker run -it -v D:\downloads:/downloads jable-downloader
-```
-
----
-
-## 💻 傳統安裝（Windows）
-
-1. 請自行安裝 ffmpeg，裝完之後執行 INIT.bat 將會自動建置其餘環境。
-2. 若收到可以執行 RUN.bat 之訊息，執行 RUN.bat 即可使用此神器。
-
-### 1. 搭建並啟用虛擬環境
-
-```
-python -m venv jable
-jable/Scripts/activate
-```
-![image](https://github.com/hcjohn463/JableDownload/blob/main/img/createVenv.PNG)
-
-### 2. 下載所需套件
-
-```
+git clone https://github.com/YOUR_USERNAME/jabletv-downloader.git
+cd jabletv-downloader
 pip install -r requirements.txt
 ```
 
-安裝 [FFmpeg] 用於轉檔
-
-### 3. 執行程式
-
-```
-python main.py
-```
-
-### 4. 輸入影片網址
-`https://jable.tv/videos/ipx-486/`  
-![image](https://github.com/hcjohn463/JableDownload/blob/main/img/download2.PNG)
-
-### 5. 等待下載與合成
-
-下載和合成影片皆有即時進度條顯示：
-
-```
-⬇ 下載進度:  73%|██████████████░░░░░  | 1334/1827 [01:12<00:27, 18.2片段/s]
-🎬 合成影片:  45%|█████████░░░░░░░░░░░ |  821/1827 [01:23<01:40]
-```
-
-### 6. 完成
-
-![image](https://github.com/hcjohn463/JableDownload/blob/main/img/demo2.png)
-
-### 如果覺得好用 再麻煩給個星星好評 謝謝!!
-
----
-
-[FFmpeg]:<https://www.ffmpeg.org/>
-
----
-
-## Argument Parser
+## Usage
 
 ```bash
-python main.py -h
-python main.py --random True       # 下載隨機熱門影片
-python main.py --url <網址>         # 直接指定 URL
-python main.py --all_urls <演員頁>  # 下載演員所有影片
+# Basic — downloads to ./<video-id>/<video-id>.mp4
+python jable_fast.py https://jable.tv/videos/adn-758/
+
+# Custom output directory
+python jable_fast.py https://jable.tv/videos/ipx-486/ -o D:/downloads
 ```
 
----
+### Options
 
-## ☸️ Kubernetes 支援
+```
+usage: jable_fast.py [-h] [-o OUTPUT] url
 
-`k8s/` 資料夾內含完整 Kubernetes 配置，可將下載任務部署為 K8s Job：
+positional arguments:
+  url                   JableTV video URL (https://jable.tv/videos/xxx/)
 
-```bash
-kubectl apply -f k8s/pvc.yaml        # 建立持久化儲存
-kubectl apply -f k8s/configmap.yaml  # 套用設定
-kubectl apply -f k8s/job.yaml        # 執行下載任務
-kubectl get jobs                      # 查看任務狀態
+options:
+  -h, --help            show this help message and exit
+  -o, --output OUTPUT   output directory (default: ./<video-id>/)
 ```
 
----
+## How it works
 
-## 📜 更新日誌 (Update Log)
+```mermaid
+flowchart LR
+    A[Playwright opens page] --> B[Extract m3u8 URL]
+    B --> C[Parse playlist]
+    C --> D{Encrypted?}
+    D -->|Yes| E[AES-128 decrypt]
+    D -->|No| F[32-thread download]
+    E --> F
+    F --> G[ffmpeg concat]
+    G --> H[Single MP4]
+```
 
-| 版本 | 日期 | 內容 |
-| :--- | :--- | :--- |
-| **v2.0** | 2026/03/15 | 🐳 支援 Docker 容器化部署、☸️ K8s (Job/PVC/ConfigMap) 支援 |
-| | | 📊 下載與合成加入 `tqdm` 即時進度條、🚀 優化合成與轉檔速度 |
-| **v1.11**| 2023/04/19 | 🦕 新增 ffmpeg 自動轉檔 |
-| **v1.10**| 2023/04/19 | 🏹 兼容 Ubuntu Server |
-| **v1.9** | 2023/04/15 | 🦅 下載演員所有相關影片 |
-| **v1.8** | 2022/01/25 | 🚗 下載結束後自動抓取封面 |
-| **v1.7** | 2021/06/04 | 🐶 更改 m3u8 獲取方法 (正則表達式) |
-| **v1.6** | 2021/05/28 | 🌏 支援 Unix 系統 (Mac, Linux 等) |
-| **v1.5** | 2021/05/27 | 🍎 更新爬蟲網頁方法 |
-| **v1.4** | 2021/05/20 | 🌳 修改編碼問題 |
-| **v1.3** | 2021/05/06 | 🌈 增加下載進度提示、修改 Crypto 問題 |
-| **v1.2** | 2021/05/05 | ⭐ 更新穩定版本 |
+1. **Playwright** opens the video page and extracts the m3u8 URL
+2. **m3u8 parser** reads the playlist to get all TS segment URLs + encryption keys
+3. **32-thread parallel downloader** fetches all segments at once
+4. **ffmpeg concat demuxer** stitches segments into MP4 without re-encoding
+5. **Cleanup** removes temporary segment files
+
+## Project structure
+
+```
+├── jable_fast.py    # Main entry point — CLI argument parsing + orchestration
+├── crawler.py       # Multi-threaded segment downloader with retry
+├── merge.py         # ffmpeg concat list generator
+├── encode.py        # ffmpeg wrapper with tqdm progress
+├── delete.py        # Temporary file cleanup
+├── config.py        # HTTP request headers
+├── requirements.txt # Python dependencies
+└── LICENSE          # MIT License
+```
+
+## Differences from upstream
+
+This fork addresses several stability and correctness issues found in the original:
+
+| Fix | Original | This fork |
+|:----|:---------|:----------|
+| File write mode | `ab` (append) — corrupts on re-run | `wb` (overwrite) — always clean |
+| Stale segment handling | Skipped existing files — reused corrupted data | Cleans old segments before download |
+| AES IV decoding | `[:16].encode()` — wrong IV bytes | `bytes.fromhex()` — correct 16-byte IV |
+| Output file exists | Early return — blocked re-download | Deletes and re-downloads |
+| Playwright path | Hardcoded to one machine | Auto-detected from PATH/npm |
+| Output directory | Fixed to CWD | `--output` / `-o` flag |
+| Dependencies | 11 (incl. unused bs4, selenium) | 4 (minimal) |
+| Docker / K8s / ChromeDriver | Bundled | Removed (out of scope) |
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
+
+## License
+
+This project is licensed under the Apache License 2.0 — see the [LICENSE](LICENSE) file for details.
+
+Original work copyright (c) 2021-2023 hcjohn463  
+Modified work copyright (c) 2026 rmtd418
