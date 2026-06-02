@@ -1,6 +1,7 @@
 """
 Jable.TV 高速下載器（32線程並行）
-使用 Playwright 提取 m3u8，多線程並發下載 TS 片段，ffmpeg 合成
+支援排隊模式 — 一次下多部，瀏覽器只開一次
+使用 Playwright 提取 m3u8，多線程並發下載 TS 片段，ffmpeg 合成 + 完整性驗證
 """
 import subprocess
 import re
@@ -60,8 +61,8 @@ def pw(*args, timeout=PW_TIMEOUT):
     )
 
 
-def get_m3u8_info(video_url):
-    """用 Playwright 提取 m3u8 地址"""
+def open_browser():
+    """開啟持久瀏覽器"""
     print('🟢 啟動瀏覽器...')
     pw('close-all')
     time.sleep(1)
@@ -69,11 +70,30 @@ def get_m3u8_info(video_url):
     if result.returncode != 0:
         raise Exception(f'啟動瀏覽器失敗: {result.stderr[:200]}')
     time.sleep(2)
+    return True
 
+
+def close_browser():
+    """關閉瀏覽器"""
+    print('🔴 關閉瀏覽器...')
+    pw('close')
+
+
+def ensure_browser():
+    """檢查瀏覽器是否存活，必要時重新開啟（下載一段時間後瀏覽器可能超時關閉）"""
+    check = pw('eval', '1+1', timeout=5)
+    if check.returncode != 0:
+        print('⚠️  瀏覽器已斷開，重新啟動...')
+        open_browser()
+        return True
+    return False
+
+
+def extract_m3u8(video_url):
+    """在已開啟的瀏覽器中導航到影片頁並提取 m3u8 地址"""
     print('🟢 載入影片頁...')
     result = pw('goto', video_url)
     if result.returncode != 0:
-        pw('close')
         raise Exception(f'導航失敗: {result.stderr[:200]}')
 
     for i in range(30):
@@ -86,7 +106,6 @@ def get_m3u8_info(video_url):
             print(f'✅ 頁面載入完成: {title[:60]}')
             break
     else:
-        pw('close')
         raise Exception('頁面載入超時（Cloudflare 驗證未通過）')
 
     result = pw('eval',
@@ -95,12 +114,17 @@ def get_m3u8_info(video_url):
 
     m = re.search(r'"(https?://[^"\s]+\.m3u8)"', result.stdout)
     if not m:
-        m = re.search(r'(https?://[^\s"\'<>]+\.m3u8)', result.stdout)
+        m = re.search(r"(https?://[^\s\"'<>]+\.m3u8)", result.stdout)
     if not m:
-        pw('close')
         raise Exception(f'無法提取 m3u8\n輸出: {result.stdout[:300]}')
 
     return m.group(1)
+
+
+def get_m3u8_info(video_url):
+    """兼容單部下載：開瀏覽器 → 提取 m3u8（由調用方關閉）"""
+    open_browser()
+    return extract_m3u8(video_url)
 
 
 def verify_segments(folderPath, expected_count, m3u8_segments):
@@ -112,20 +136,17 @@ def verify_segments(folderPath, expected_count, m3u8_segments):
 
     issues = []
 
-    # 1. 檢查數量
     if actual != expected_count:
         issues.append(f'片段數量不符: 期望 {expected_count}, 實際 {actual}')
     else:
         print(f'✅ 片段數量: {actual}/{expected_count}')
 
-    # 2. 檢查零字節
     zero_bytes = [f for f in mp4_files if os.path.getsize(os.path.join(folderPath, f)) == 0]
     if zero_bytes:
         issues.append(f'零字節片段: {len(zero_bytes)} 個 (應自動重試)')
     else:
         print('✅ 無零字節片段')
 
-    # 3. 輸出期望時長
     if expected_duration:
         exp_m, exp_s = divmod(int(expected_duration), 60)
         exp_h, exp_m = divmod(exp_m, 60)
@@ -145,16 +166,13 @@ def verify_mp4(filepath, expected_duration=None):
         print(f'❌ 檔案不存在: {filepath}')
         return False
 
-    # 轉為 Windows 絕對路徑（ffprobe 需要）
     filepath = os.path.abspath(filepath)
 
-    # 檢查檔案大小
     size_mb = os.path.getsize(filepath) / 1024 / 1024
     if size_mb < 1:
         print(f'⚠️  檔案過小: {size_mb:.1f} MB')
         return False
 
-    # ffprobe 檢查
     try:
         result = subprocess.run(
             ['ffprobe', '-v', 'quiet', '-print_format', 'json',
@@ -188,7 +206,6 @@ def verify_mp4(filepath, expected_duration=None):
             print('❌ 缺少視頻流')
             return False
 
-        # 對比期望時長（允許 60s 誤差，HLS 片段時長波動正常）
         if expected_duration and abs(actual_duration - expected_duration) > 60:
             print(f'⚠️  時長偏差較大: 期望 {expected_duration:.0f}s, 實際 {actual_duration:.0f}s')
 
@@ -243,20 +260,17 @@ def download_fast(m3u8url, folderPath, dirName):
     print('🚀 32線程並行下載中...')
     prepareCrawl(ci_params, folderPath, tsList)
 
-    # === 驗證 1: 下載後檢查 ===
     print('🔍 驗證下載完整性...')
     seg_ok = verify_segments(folderPath, expected_count, m3u8obj.segments)
     if not seg_ok:
         print('⚠️  片段驗證未通過，仍嘗試合成（可能部分丟失）')
 
-    # 合成 mp4
     print('🔗 合成 mp4...')
     mergeMp4(folderPath, tsList)
 
     print('🎬 ffmpeg 最終處理...')
     ffmpegEncode(folderPath, dirName, 1)
 
-    # === 驗證 2: 合成後檢查 ===
     output_path = os.path.join(folderPath, f'{dirName}.mp4')
     print('🔍 驗證最終 MP4...')
     expected_dur = sum(s.duration for s in m3u8obj.segments if s.duration)
@@ -274,28 +288,15 @@ def download_fast(m3u8url, folderPath, dirName):
     print(f'✅ 完成: {output_path}')
 
 
-def main():
-    import argparse
-    parser = argparse.ArgumentParser(description='JableTV Downloader - 高速並行下載')
-    parser.add_argument('url', help='JableTV 影片網址 (https://jable.tv/videos/xxx/)')
-    parser.add_argument('-o', '--output', default=None, help='輸出目錄 (預設: ./output/番號/)')
-    args = parser.parse_args()
-
-    if not PW_CLI_JS or not os.path.exists(PW_CLI_JS):
-        print('❌ 找不到 playwright-cli.js')
-        print('   請先安裝: npm install -g @playwright/cli')
-        sys.exit(1)
-
-    url = args.url
-    print(f'🎬 開始: {url}')
-
+def process_single(url, output_base):
+    """下載單一影片（瀏覽器已開啟），返回 (番號, True/False, 訊息)"""
     match = re.search(r'/videos/([^/]+)', url)
     if not match:
-        print('❌ 無法解析番號')
-        sys.exit(1)
-    vid = match.group(1)
+        return (url, False, '無法解析番號')
 
-    output_dir = args.output if args.output else os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', vid)
+    vid = match.group(1)
+    output_dir = os.path.join(output_base, vid) if output_base else \
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', vid)
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f'{vid}.mp4')
 
@@ -304,28 +305,89 @@ def main():
         try:
             os.remove(output_path)
         except PermissionError:
-            print(f'⚠️ 無法刪除舊檔案（可能被佔用），跳過')
+            return (vid, False, '檔案被佔用無法刪除')
 
-    browser_opened = False
     try:
-        print('🔍 提取 m3u8...')
-        m3u8url = get_m3u8_info(url)
-        browser_opened = True
-        print(f'✅ m3u8: {m3u8url}')
-
+        print(f'\n▶️ [{vid}] 提取 m3u8...')
+        # 確保瀏覽器存活（下載過程中可能超時關閉）
+        ensure_browser()
+        m3u8url = extract_m3u8(url)
+        print(f'✅ [{vid}] m3u8 獲取成功')
         download_fast(m3u8url, output_dir, vid)
-
+        return (vid, True, '下載完成')
     except Exception as e:
-        print(f'❌: {e}')
+        print(f'❌ [{vid}] 拋出異常: {e}')
         import traceback
         traceback.print_exc()
+        return (vid, False, str(e)[:150])
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='JableTV Downloader - 高速並行下載（支援排隊）')
+    parser.add_argument('url', nargs='+', help='JableTV 影片網址（可指定多個，自動排隊下載）')
+    parser.add_argument('-o', '--output', default=None, help='輸出基礎目錄（預設: ./output/）')
+    args = parser.parse_args()
+
+    if not PW_CLI_JS or not os.path.exists(PW_CLI_JS):
+        print('❌ 找不到 playwright-cli.js')
+        print('   請先安裝: npm install -g @playwright/cli')
         sys.exit(1)
+
+    urls = args.url
+    batch_mode = len(urls) > 1
+    output_base = args.output if args.output else \
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
+
+    if batch_mode:
+        print(f'🎬 排隊模式: 共 {len(urls)} 部影片')
+        for i, u in enumerate(urls, 1):
+            vid = re.search(r'/videos/([^/]+)', u)
+            v = vid.group(1) if vid else u
+            print(f'  [{i}/{len(urls)}] {v}')
+    else:
+        print(f'🎬 單部下載: {urls[0]}')
+
+    # 啟動瀏覽器（整個批次共用）
+    try:
+        open_browser()
+    except Exception as e:
+        print(f'❌ 啟動瀏覽器失敗: {e}')
+        sys.exit(1)
+
+    results = []
+    try:
+        for i, url in enumerate(urls, 1):
+            vid_match = re.search(r'/videos/([^/]+)', url)
+            label = vid_match.group(1) if vid_match else url
+
+            print(f'\n{"="*50}')
+            if batch_mode:
+                print(f'[{i}/{len(urls)}] 🎬 {label}')
+            else:
+                print(f'🎬 {label}')
+            print(f'{"="*50}')
+
+            vid, ok, msg = process_single(url, output_base)
+            results.append((vid, ok, msg))
+
     finally:
-        if browser_opened:
-            print('🔴 關閉瀏覽器...')
-            pw('close')
-        else:
-            pw('close-all')
+        close_browser()
+
+    # 總結
+    print(f'\n{"="*50}')
+    print(f'📊 下載總結')
+    print(f'{"="*50}')
+    success = [r for r in results if r[1]]
+    failed = [r for r in results if not r[1]]
+    print(f'✅ 成功: {len(success)}')
+    if failed:
+        print(f'❌ 失敗: {len(failed)}')
+        for vid, _, msg in failed:
+            print(f'  ❌ {vid}: {msg}')
+
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == '__main__':

@@ -33,6 +33,8 @@ def ffmpegEncode(folder_path, file_name, action=1):
 
     # 取得片段總數（用於進度條）
     total_segments = get_segment_count(folder_path)
+    if total_segments is None:
+        total_segments = 0
 
     # 這裡我們觀察 FFmpeg 的進度輸出
     # 因為是 concat copy，通常很快，我們追蹤 frame 或者是 time

@@ -21,6 +21,7 @@ Fast multi-threaded JableTV video downloader. Extracts m3u8 via Playwright, down
 - 🔐 **AES-128 解密** — 支持加密流 / Handles encrypted streams
 - 📊 **实时进度条** — tqdm 显示下载与合成进度 / Real-time progress via tqdm
 - 🎬 **快速合成** — ffmpeg `-c copy` 不重编码 / Lossless concat with instant streaming
+- 📦 **排队批量下载** — 一次丢多部，浏览器只开一次，自动排队 / Batch queue with shared browser session
 - ✅ **下载验证** — 零字节片段检测 + 片段数量核对 / Zero-byte detection + segment count check
 - ✅ **合成验证** — ffprobe 检查视频流、音频流、时长 / ffprobe checks video, audio, duration
 - 🧹 **自动清理** — 保留最终文件，安全删除临时片段 / Safe cleanup, preserves final output
@@ -46,8 +47,11 @@ npx playwright install chromium
 # 基础用法 — 下载到 ./output/番号/番号.mp4
 python jable_fast.py https://jable.tv/videos/adn-758/
 
-# 自定义输出路径（推荐带子目录）
+# 自定义输出路径
 python jable_fast.py https://jable.tv/videos/ipx-486/ -o D:/downloads
+
+# 排队批量下载（浏览器只开一次，一部接一部）
+python jable_fast.py https://jable.tv/videos/adn-758/ https://jable.tv/videos/ipx-486/ https://jable.tv/videos/ssis-927/
 ```
 
 ### 参数 | Options
@@ -130,6 +134,8 @@ flowchart LR
 | 零字节片段 | 无检测 — 空文件混入合并 | 下载后立即检查，自动重试 |
 | 片段数量 | 不校验 | 合成前比对 m3u8 声明数 |
 | 合成后验证 | 无 | ffprobe 检查视频流/音频流/时长 |
+| 批量下载 | 不支持 | 多个 URL 排队自动下，浏览器复用 |
+| 浏览器断线 | 死透 | `ensure_browser()` 自动检测重连 |
 
 ---
 

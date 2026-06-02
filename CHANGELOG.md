@@ -2,6 +2,18 @@
 
 All notable changes to this fork are documented here.
 
+## v2.3.0 — 2026-06-02
+
+### ✨ Features
+
+- **排隊批量下載 / Batch queue mode**: Support multiple URLs as positional arguments. Opens browser once and processes downloads sequentially, reusing the same Playwright session. Usage: `python jable_fast.py URL1 URL2 URL3`
+- **瀏覽器斷線自動重連 / Browser auto-reconnect**: Added `ensure_browser()` — checks if the Playwright browser is still alive before each video in the queue. If the browser timed out during a long download (e.g., >2 min), it automatically reopens it instead of crashing.
+- **架構重構 / Code refactor**: Split browser lifecycle management into `open_browser()`, `close_browser()`, `extract_m3u8()`, and `ensure_browser()` for clean reuse between single and batch modes.
+
+### 🐛 Bug fixes
+
+- **ffmpegEncode NoneType crash**: `get_segment_count()` could return `None` when `concat_list.txt` was missing. Added `if total_segments is None: total_segments = 0` guard to prevent `TypeError: '<' not supported between instances of 'int' and 'NoneType'`.
+
 ## v2.2.0 — 2026-06-02
 
 ### 🐛 Bug fixes
