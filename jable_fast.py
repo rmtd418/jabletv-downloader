@@ -147,7 +147,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description='JableTV Downloader - 高速並行下載')
     parser.add_argument('url', help='JableTV 影片網址 (https://jable.tv/videos/xxx/)')
-    parser.add_argument('-o', '--output', default=None, help='輸出目錄 (預設: 當前目錄/番號)')
+    parser.add_argument('-o', '--output', default=None, help='輸出目錄 (預設: ./output/番號/)')
     args = parser.parse_args()
 
     if not PW_CLI_JS or not os.path.exists(PW_CLI_JS):
@@ -164,7 +164,7 @@ def main():
         sys.exit(1)
     vid = match.group(1)
 
-    output_dir = args.output if args.output else os.path.join(os.getcwd(), vid)
+    output_dir = args.output if args.output else os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', vid)
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f'{vid}.mp4')
 

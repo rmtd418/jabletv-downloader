@@ -36,7 +36,7 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
-# Basic — downloads to ./<video-id>/<video-id>.mp4
+# Basic — downloads to ./output/<video-id>/<video-id>.mp4
 python jable_fast.py https://jable.tv/videos/adn-758/
 
 # Custom output directory
@@ -53,7 +53,7 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  -o, --output OUTPUT   output directory (default: ./<video-id>/)
+  -o, --output OUTPUT   output directory (default: ./output/<video-id>/)
 ```
 
 ## How it works

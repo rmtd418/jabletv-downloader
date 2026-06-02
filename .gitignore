@@ -6,6 +6,7 @@ __pycache__/
 # 虛擬環境
 /jable
 venv/
+.venv/
 env/
 
 # 影片與暫存檔
@@ -22,5 +23,5 @@ concat_list.txt
 .playwright-cli/
 
 # 下載資料夾
-downloads/
 output/
+downloads/
