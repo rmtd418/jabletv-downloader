@@ -154,6 +154,10 @@ flowchart LR
 | 输出目录 | 固定当前目录 | `--output` / `-o` 参数 |
 | Python 依赖 | 11 个（含未使用的 bs4、selenium） | 4 个（最小化） |
 | 冗余代码 | Docker / K8s / ChromeDriver | 已移除 |
+| 浏览器泄漏 | 每次下载开新 Chrome 永不关 | `finally` 精确关闭，零泄漏 |
+| pw() 超时 | 30s 固定，慢网必崩 | 120s + Cloudflare 轮询自适应 |
+| m3u8 下载 | `urlretrieve` 无超时可永久卡死 | `requests.get(timeout=15)` 安全限时 |
+| 删除权限 | 文件被锁直接崩 | `try/except PermissionError` 优雅跳过 |
 
 ---
 

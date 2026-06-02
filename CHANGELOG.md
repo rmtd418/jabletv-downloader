@@ -2,27 +2,21 @@
 
 All notable changes to this fork are documented here.
 
-## v2.1.0 — 2026-06-02
-
-Forked from [hcjohn463/JableTVDownload](https://github.com/hcjohn463/JableTVDownload) v2.0 with the following changes:
+## v2.2.0 — 2026-06-02
 
 ### 🐛 Bug fixes
 
-- **File write mode**: Changed `open()` from `ab` (append) to `wb` (overwrite). Previously, partial or corrupted segment files from interrupted runs would be appended to instead of replaced, causing corrupted output.
-- **AES IV decoding**: Fixed IV hex parsing from `m3u8iv.replace("0x", "")[:16].encode()` to `bytes.fromhex(...)`. The old code produced 8 ASCII bytes instead of 16 decoded hex bytes, which would decrypt encrypted streams with the wrong IV.
-- **Stale segment handling**: Removed the "skip existing files" optimization in `_run_crawl()`. Old segment files left behind by a killed process were treated as valid and skipped during re-download, leading to corrupted merges. Now cleans all stale `.mp4` segments before starting fresh.
-- **Output file collision**: Changed early `return` when output `.mp4` exists to `os.remove()` + proceed, so a corrupted or partial output file doesn't block re-download.
+- **Browser process leak**: Added `browser_opened` flag with precise `finally` block to close only the browser we opened. Previously, every download spawned a new Chrome process that was never cleaned up, accumulating dozens of zombie processes over multiple runs.
+- **`pw()` internal timeout**: Raised the default Playwright timeout from 30s to 120s. The old 30s limit would trigger `TimeoutError` on slow networks or under Cloudflare anti-bot challenge.
+- **Cloudflare hard wait → polling loop**: Replaced `time.sleep(8)` with a 30-second polling loop that checks `document.title` every second. The fixed 8s delay was either too short (under load) or wasted time (when fast), while polling adapts dynamically.
+- **`urlretrieve` no timeout → `requests.get(timeout=15)`**: Changed `urllib.request.urlretrieve()` to `requests.get(timeout=15)` for m3u8 file downloads. `urlretrieve` has no timeout parameter and could hang indefinitely on stalled connections.
+- **Proper browser cleanup on exit**: Restored `pw('close')` in `finally` block with accurate tracking. The previous removal of `pw('close')` caused every download session to leave a lingering Chrome process.
+- **`deleteMp4()` PermissionError handling**: Wrapped file deletion in `try/except PermissionError` to handle Windows file locks (e.g., ffprobe, Explorer, antivirus holding the file). The final `.mp4` output is never deleted; only temporary segment files are cleaned.
 
 ### ✨ Enhancements
 
-- **Auto-detect playwright-cli**: No more hardcoded paths. Searches `PATH`, common npm global locations, and `require.resolve()` automatically.
-- **`--output` / `-o` flag**: Custom output directory via CLI argument instead of always using CWD.
-- **Argument parser**: Replaced bare `sys.argv` with proper `argparse` for better UX and `--help` support.
-- **Cleaner dependencies**: Removed unused packages (beautifulsoup4, selenium, soupsieve, etc.). Down to 4 runtime deps.
-- **Updated `.gitignore`**: Removed chromedriver references, added `concat_list.txt` and `.playwright-cli/`.
+- **Browser lifecycle management**: The script now properly tracks whether it opened the browser itself vs. using an existing session, ensuring clean teardown in all code paths.
 
 ### 🔧 Maintenance
 
-- Stripped deprecated Docker, Kubernetes, ChromeDriver, and Selenium code.
-- Removed unused modules: `main.py`, `args.py`, `download.py`, `jable_dl.py`, `cover.py`, `movies.py`, `getchromedriver.py`.
-- Rewrote README with English docs, comparison table, and flow diagram.
+- Updated `delete.py` with safer cleanup logic that skips files still in use instead of crashing.
