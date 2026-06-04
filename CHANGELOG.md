@@ -2,6 +2,14 @@
 
 All notable changes to this fork are documented here.
 
+## v2.4.0 — 2026-06-04
+
+### ✨ Features
+
+- **🎴 封面下载器 / Cover downloader**: New standalone CLI tool `cover.py` for batch extracting JableTV video covers (800×538 HD). Supports concurrent parallel loading via `tab-new`, significantly faster than sequential extraction. Usage: `python cover.py jur-704 jur-753 ntrh-020`
+- **📁 独立封面输出目录 / Dedicated cover output folder**: Covers are stored in `output/covers/<番号>.jpg`, separate from video downloads.
+- **🔢 番号简写支持 / Shorthand ID support**: `cover.py` accepts both full URLs and bare番号 (e.g., `jur-704` → auto-completes to `https://jable.tv/videos/jur-704/`)
+
 ## v2.3.0 — 2026-06-02
 
 ### ✨ Features
