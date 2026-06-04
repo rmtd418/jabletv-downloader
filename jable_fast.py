@@ -398,7 +398,7 @@ def download_covers(video_ids, output_dir=None):
     for i, num_id, vid in items:
         pw('tab-new', f'https://assets-cdn.jable.tv/contents/videos_screenshots/59000/{num_id}/preview.jpg')
     time.sleep(3)
-    # 第三步: 逐个提取保存
+    # 第三步: 逐个提取保存（不关tab，避免索引错位）
     results = []
     print('\n🎨 提取封面...')
     for idx, (orig_i, num_id, vid) in enumerate(items):
@@ -414,7 +414,6 @@ def download_covers(video_ids, output_dir=None):
         else:
             print(f'  ❌ [{idx+1}/{len(items)}] {vid} 提取失败')
             results.append((vid, False, None))
-        pw('tab-close', str(tab_idx))
     close_browser()
     # 总结
     print(f'\n{"="*40}')
