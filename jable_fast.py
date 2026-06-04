@@ -323,19 +323,8 @@ def process_single(url, output_base):
         return (vid, False, str(e)[:150])
 
 
-def _extract_numeric_id(video_url):
-    """从视频页面提取数字ID（用于拼封面URL）"""
-    pw('goto', video_url)
-    for i in range(30):
-        time.sleep(1)
-        title_r = pw('eval', 'document.title')
-        if title_r.returncode != 0:
-            continue
-        title = title_r.stdout.strip().strip('"')
-        if '请稍候' not in title and 'Please' not in title and title:
-            break
-    else:
-        raise Exception(f'⏰ 页面加载超时: {video_url}')
+def _get_numeric_id():
+    """从当前页面提取数字ID（页面已加载，无需goto/等CF）"""
     # 方法1: poster背景图
     r = pw('eval', '(function(){var p=document.querySelector(".plyr__poster");if(p&&p.style.backgroundImage)return p.style.backgroundImage;var v=document.querySelector("[poster]");if(v)return v.getAttribute("poster");return""})()')
     m = re.search(r'/(\d{5,})/preview\.jpg', r.stdout)
@@ -346,7 +335,7 @@ def _extract_numeric_id(video_url):
     m = re.search(r'"(\d{5,})"', r.stdout)
     if m:
         return m.group(1)
-    raise Exception(f'❌ 无法提取数字ID: {video_url}')
+    return None
 
 
 def _canvas_extract_cover(output_path):
@@ -362,7 +351,7 @@ def _canvas_extract_cover(output_path):
 
 
 def download_covers(video_ids, output_dir=None):
-    """批量下载封面 — 并行打开tab + 逐个canvas提取"""
+    """批量下载封面 — 并行开视频页（只等一次CF）+ 并行加载封面"""
     if not video_ids:
         print('❌ 未指定番号')
         return
@@ -378,33 +367,54 @@ def download_covers(video_ids, output_dir=None):
     print(f'🎴 封面下载: {len(urls)} 部')
     print(f'📁 输出目录: {output_dir}')
     open_browser()
-    # 第一步: 提取数字ID（串行）
+    # 第一步: 并行打开所有视频页（tabs 1~N）
+    print(f'\n📂 并行加载视频页 ({len(urls)} 部)...')
+    for url in urls:
+        pw('tab-new', url)
+    # 只等一次 Cloudflare
+    print('⏳ 等待 Cloudflare 验证...')
+    pw('tab-select', '1')
+    for i in range(30):
+        time.sleep(1)
+        title_r = pw('eval', 'document.title')
+        if title_r.returncode != 0:
+            continue
+        title = title_r.stdout.strip().strip('"')
+        if '请稍候' not in title and 'Please' not in title and title:
+            print(f'  ✅ 已通过 (第 {i+1}s)')
+            break
+    else:
+        print('  ⚠️  超时，仍尝试提取')
+    # 第二步: 逐个提取数字ID（页面已加载）
     ids, vids = [], []
-    for i, url in enumerate(urls, 1):
-        m = re.search(r'/videos/([^/]+)', url)
-        vid = m.group(1) if m else f'video_{i}'
+    for i, url in enumerate(urls):
+        pw('tab-select', str(i + 1))
+        vid = url.rstrip('/').split('/videos/')[1]
         vids.append(vid)
-        print(f'  [{i}/{len(urls)}] 解析 {vid}...', end='', flush=True)
+        print(f'  [{i+1}/{len(urls)}] {vid}...', end='', flush=True)
         try:
-            num_id = _extract_numeric_id(url)
-            ids.append(num_id)
-            print(f' ID={num_id} ✅')
+            num_id = _get_numeric_id()
+            if num_id:
+                ids.append(num_id)
+                print(f' ID={num_id} ✅')
+            else:
+                ids.append(None)
+                print(' ❌ 无法提取')
         except Exception as e:
             ids.append(None)
             print(f' ❌ {e}')
-    # 第二步: 并行打开封面tab
+    # 第三步: 并行打开封面tab
     items = [(i, num_id, vid) for i, (num_id, vid) in enumerate(zip(ids, vids)) if num_id]
-    print(f'\n📥 并行加载封面 ({len(items)} 张)...')
+    print(f'\n📥 加载封面 ({len(items)} 张)...')
     for i, num_id, vid in items:
         pw('tab-new', f'https://assets-cdn.jable.tv/contents/videos_screenshots/59000/{num_id}/preview.jpg')
-    time.sleep(3)
-    # 第三步: 逐个提取保存（不关tab，避免索引错位）
+    time.sleep(2)
+    # 第四步: 提取封面（视频tab占 1~N，封面tab从 N+1 开始）
+    offset = len(urls)
     results = []
-    print('\n🎨 提取封面...')
+    print('🎨 提取封面...')
     for idx, (orig_i, num_id, vid) in enumerate(items):
-        tab_idx = idx + 1
-        pw('tab-select', str(tab_idx))
-        time.sleep(0.3)
+        pw('tab-select', str(offset + 1 + idx))
         fpath = os.path.join(output_dir, f'{vid}.jpg')
         ok = _canvas_extract_cover(fpath)
         if ok:
