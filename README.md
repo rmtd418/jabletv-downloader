@@ -26,7 +26,7 @@ Fast multi-threaded JableTV video downloader. Extracts m3u8 via Playwright, down
 - ✅ **合成验证** — ffprobe 检查视频流、音频流、时长 / ffprobe checks video, audio, duration
 - 🧹 **自动清理** — 保留最终文件，安全删除临时片段 / Safe cleanup, preserves final output
 - 🔌 **路径自动检测** — playwright-cli 自动定位，无需手动配置 / Auto-detect playwright-cli path
-- 🎴 **封面下载** — 独立 CLI 批量提取 800×538 高清封面，支持并发 / Standalone cover extractor with batch concurrent support
+- 🎴 **封面下载** — `jable_fast.py cover` 子命令批量提取 800×538 高清封面，支持并发 / Integrated cover subcommand with batch concurrent support
 
 ---
 
@@ -44,20 +44,20 @@ npx playwright install chromium
 
 ## 封面下载 | Cover Downloader
 
-独立 CLI 工具，批量提取 JableTV 视频封面（800×538 高清），支持并行加载加速。
+集成在 `jable_fast.py` 中的 `cover` 子命令，批量提取 JableTV 视频封面（800×538 高清），支持并行加载加速。
 
 ```bash
 # 单部封面
-python cover.py https://jable.tv/videos/jur-704/
+python jable_fast.py cover https://jable.tv/videos/jur-704/
 
 # 支持番号简写
-python cover.py jur-704
+python jable_fast.py cover jur-704
 
 # 批量并发下载（并行加载封面图片）
-python cover.py jur-704 jur-753 ntrh-020 dass-945
+python jable_fast.py cover jur-704 jur-753 ntrh-020 dass-945
 
 # 自定义输出目录
-python cover.py -o D:/covers jur-704 jur-753
+python jable_fast.py cover -o D:/covers jur-704 jur-753
 ```
 
 默认输出到 `output/covers/<番号>.jpg` / Default output: `output/covers/<vid>.jpg`
@@ -135,8 +135,7 @@ flowchart LR
 ## 项目结构 | Project structure
 
 ```
-├── jable_fast.py    # 主入口 — CLI 参数 + 流程编排 + 完整性验证
-├── cover.py         # 封面下载器 — 独立 CLI，支持批量并发
+├── jable_fast.py    # 主入口 — CLI 参数 + 下载 + 封面提取 + 完整性验证
 ├── crawler.py       # 多线程下载引擎 + 自动重试 + 零字节检测
 ├── merge.py         # ffmpeg concat 清单生成
 ├── encode.py        # ffmpeg 封装 + tqdm 进度
